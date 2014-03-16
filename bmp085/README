@@ -1,0 +1,16 @@
+This sub20 app bmp085 is used to interact via i2c with the temperature and pressure
+sensor by bosh.
+DS is available here: https://www.sparkfun.com/datasheets/Components/General/BST-BMP085-DS000-05.pdf
+I've ordered from here:
+http://dx.com/p/bosch-bmp085-digital-temperature-air-pressure-sensor-module-154916#.UyQY41JdV59
+
+
+
+## Connections and Conf.
+Sub20 has been configured to operate GPIO at 5v Jumper J7 to the left.
+bmp085 is powerd by using gpio-34 GND and gpio-33 Vcc
+for the i2c part :
+ SDA to gpio-1
+ SCL to gpio-2
+
+Slave Address 0x77
