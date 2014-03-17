@@ -5,6 +5,7 @@
 
 #include "libsub.h"
 #include "utils.h"
+#include <unistd.h>
 
 //#include "cmd_pars.h"
 #include "sub_app.h"
