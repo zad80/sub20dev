@@ -6,7 +6,7 @@
 #include "libsub.h"
 #include "utils.h"
 #include <unistd.h>
-
+#include <stdint.h>
 //#include "cmd_pars.h"
 #include "sub_app.h"
 
@@ -60,6 +60,8 @@ sub_handle* fd = NULL ;
 
 void bmp085_get_cal_data(void);
 void bmp085_read_temperature_and_pressure(int * temperature, long int* pressure);
+unsigned int bmp085_read_ut(void);
+long bmp085_read_up(void);
 /*
 *-------------------------------------------------------------------------------
 * START
@@ -137,45 +139,57 @@ int main( int argc, char* argv[] )
 	bool loop = true;
 	int temperature=0;
 	long int pressure=0;
+	bmp085_get_cal_data();
 	while(loop){
-
+		bmp085_read_temperature_and_pressure(&temperature,&pressure);
+		printf("Temperature %d , pressure %ld\n",temperature,pressure);
 		usleep(100);
 	}
-#if 0
-        case 'P':
-            rc = sub_i2c_stop( fd );
-            break;
-        case 'R':
-            if( config.bb_i2c_ch != -1 )
-                rc = sub_bb_i2c_read( fd, config.bb_i2c_ch, config.sa, 
-                            config.ma, config.ma_sz, config.buf, config.sz );
-            else
-                rc = sub_i2c_read( fd, config.sa, 
-                            config.ma, config.ma_sz, config.buf, config.sz );
-            if( !rc )
-                hex_ascii_dump( config.buf, config.sz );
-            break;
-        case 'r':
-            if( config.rs_baud )
-                rc=sub_rs_set_config( fd, config.rs_config, config.rs_baud );
-            else
-                rc=sub_rs_get_config( fd,&config.rs_config,&config.rs_baud );
-            if( !rc )
-                printf( "RS Config:0x%02X Baud=%d\n", 
-                                        config.rs_config, config.rs_baud );
-            break;
-#endif
-
-	if( rc )
+/*
+if( rc )
     {
         printf("Failed(rc=%d): %s\n", rc,sub_strerror(sub_errno));
         if( rc == SE_I2C )
             printf("I2C Status: %02x\n", sub_i2c_status );
-        
     }
+*/
     sub_close( fd );
 	return rc;
 }
+
+void write_register(unsigned char r, unsigned char v)
+{
+	config.buf[0]=v;
+	int rc = sub_i2c_write( fd, I2C_ADDRESS,r,1, config.buf, 1 );
+	if(rc)
+		printf("write_register error \n");
+
+}
+
+char read_register(unsigned char r)
+{
+	int rc = sub_i2c_read( fd,I2C_ADDRESS ,r, 1, config.buf, 1 );
+	if(!rc)
+		return config.buf[1];
+	else
+		printf("read_register error \n");
+	return 0;
+}
+
+int read_int_register(unsigned char r)
+{
+	unsigned char msb=0, lsb=0;
+	int rc = sub_i2c_read( fd,I2C_ADDRESS ,r, 2, config.buf, 2 );
+	if(!rc ){
+		msb = config.buf[0];
+		lsb = config.buf[1];
+		return (((int)msb<<8) | ((int)lsb));
+	}
+	else
+		printf("read_int_register error \n");
+	return 0;
+}
+
 
 void bmp085_read_temperature_and_pressure(int* temperature, long int* pressure) {
   int  ut= bmp085_read_ut();
@@ -193,7 +207,7 @@ void bmp085_read_temperature_and_pressure(int* temperature, long int* pressure) 
    x1 = (b2 * (b6 * b6 >> 12)) >> 11; 
    x2 = ac2 * b6 >> 11;
    x3 = x1 + x2;
-   b3 = (((int32_t) ac1 * 4 + x3)<<oversampling_setting + 2) >> 2;
+   b3 = (((int32_t) ac1 * 4 + x3)<< (oversampling_setting + 2) ) >> 2;
    x1 = ac3 * b6 >> 13;
    x2 = (b1 * (b6 * b6 >> 12)) >> 16;
    x3 = ((x1 + x2) + 2) >> 2;
@@ -209,116 +223,50 @@ void bmp085_read_temperature_and_pressure(int* temperature, long int* pressure) 
 
 
 unsigned int bmp085_read_ut() {
-  write_register(0xf4,0x2e);
-  usleep(5); //longer than 4.5 ms
-  return read_int_register(0xf6);
+	write_register(0xf4,0x2e);
+	usleep(5); //longer than 4.5 ms
+	return read_int_register(0xf6);
 }
 
 void  bmp085_get_cal_data() {
-  Serial.println("Reading Calibration Data");
-  ac1 = read_int_register(0xAA);
-  Serial.print("AC1: ");
-  Serial.println(ac1,DEC);
-  ac2 = read_int_register(0xAC);
-  Serial.print("AC2: ");
-  Serial.println(ac2,DEC);
-  ac3 = read_int_register(0xAE);
-  Serial.print("AC3: ");
-  Serial.println(ac3,DEC);
-  ac4 = read_int_register(0xB0);
-  Serial.print("AC4: ");
-  Serial.println(ac4,DEC);
-  ac5 = read_int_register(0xB2);
-  Serial.print("AC5: ");
-  Serial.println(ac5,DEC);
-  ac6 = read_int_register(0xB4);
-  Serial.print("AC6: ");
-  Serial.println(ac6,DEC);
-  b1 = read_int_register(0xB6);
-  Serial.print("B1: ");
-  Serial.println(b1,DEC);
-  b2 = read_int_register(0xB8);
-  Serial.print("B2: ");
-  Serial.println(b1,DEC);
-  mb = read_int_register(0xBA);
-  Serial.print("MB: ");
-  Serial.println(mb,DEC);
-  mc = read_int_register(0xBC);
-  Serial.print("MC: ");
-  Serial.println(mc,DEC);
-  md = read_int_register(0xBE);
-  Serial.print("MD: ");
-  Serial.println(md,DEC);
+	printf("Reading Calibration Data\n");
+	ac1 = read_int_register(0xAA);
+	printf("AC1: %d\n",ac1);
+	ac2 = read_int_register(0xAC);
+	printf("AC2: %d\n",ac2);
+	ac3 = read_int_register(0xAE);
+	printf("AC3: %d\n",ac3);
+	ac4 = read_int_register(0xB0);
+	printf("AC4: %d\n",ac4);
+	ac5 = read_int_register(0xB2);
+	printf("AC5: %d\n",ac5);
+	ac6 = read_int_register(0xB4);
+	printf("AC6: %d\n",ac6);
+	b1 = read_int_register(0xB6);
+	printf("B1: %d\n",b1);
+	b2 = read_int_register(0xB8);
+	printf("B2: %d\n",b2);
+	mb = read_int_register(0xBA);
+	printf("MB: %d\n",mb);
+	mc = read_int_register(0xBC);
+	printf("MC: %d\n",mc);
+	md = read_int_register(0xBE);
+	printf("MD: %d\n",md);
 }
 
 
 long bmp085_read_up() {
-  write_register(0xf4,0x34+(oversampling_setting<<6));
-  usleepz(pressure_waittime[oversampling_setting]);
-  
-  unsigned char msb, lsb, xlsb;
-  Wire.beginTransmission(I2C_ADDRESS);
-  Wire.send(0xf6);  // register to read
-  Wire.endTransmission();
+	int rc =0;
+	write_register(0xf4,0x34+(oversampling_setting<<6));
+	usleep(pressure_waittime[oversampling_setting]);
 
-  Wire.requestFrom(I2C_ADDRESS, 3); // read a byte
-  while(!Wire.available()) {
-    // waiting
-  }
-  msb = Wire.receive();
-  while(!Wire.available()) {
-    // waiting
-  }
-  lsb |= Wire.receive();
-  while(!Wire.available()) {
-    // waiting
-  }
-  xlsb |= Wire.receive();
-  return (((long)msb<<16) | ((long)lsb<<8) | ((long)xlsb)) >>(8-oversampling_setting);
+	rc = sub_i2c_read( fd,I2C_ADDRESS ,0xf6, 3, config.buf, 3 );
+	if(!rc)
+		return (((long)config.buf[0]<<16) | ((long)config.buf[3]<<8) | ((long)config.buf[2])) >>(8-oversampling_setting);
+	else
+		printf("bmp085_read_up error \n");
+	return 0;
 }
-
-void write_register(unsigned char r, unsigned char v)
-{
-  Wire.beginTransmission(I2C_ADDRESS);
-  Wire.send(r);
-  Wire.send(v);
-  Wire.endTransmission();
-}
-
-char read_register(unsigned char r)
-{
-  unsigned char v;
-  Wire.beginTransmission(I2C_ADDRESS);
-  Wire.send(r);  // register to read
-  Wire.endTransmission();
-
-  Wire.requestFrom(I2C_ADDRESS, 1); // read a byte
-  while(!Wire.available()) {
-    // waiting
-  }
-  v = Wire.receive();
-  return v;
-}
-
-int read_int_register(unsigned char r)
-{
-  unsigned char msb, lsb;
-  Wire.beginTransmission(I2C_ADDRESS);
-  Wire.send(r);  // register to read
-  Wire.endTransmission();
-
-  Wire.requestFrom(I2C_ADDRESS, 2); // read a byte
-  while(!Wire.available()) {
-    // waiting
-  }
-  msb = Wire.receive();
-  while(!Wire.available()) {
-    // waiting
-  }
-  lsb = Wire.receive();
-  return (((int)msb<<8) | ((int)lsb));
-}
-
 
 
 
