@@ -1,10 +1,6 @@
 #ifndef __UTILS_H
 #define __UTILS_H
 
-typedef enum {
-	false,
-	true,
-}bool;
 
 void hex_scan( char* buf_in, char* buf_out, int* sz );
 void hex_ascii_dump( char* buf, int sz );

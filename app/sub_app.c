@@ -155,6 +155,7 @@ int main( int argc, char* argv[] )
         {
             printf( "Transaction failed (%s)\n", sub_strerror( sub_errno ) );
         }
+            printf( "Transaction OK \n" );
         rc=0;
     }
 
@@ -229,6 +230,7 @@ int main( int argc, char* argv[] )
         case 'C':
             rc = sub_bb_i2c_config( fd, config.bb_i2c_mode, 
                                                 config.bb_i2c_stretch );
+	    printf("sub_bb_i2c_config \n");
             break;
 
             /* I2C Config */
@@ -237,6 +239,7 @@ int main( int argc, char* argv[] )
             int i2c_flags=0;
             if( config.i2c_dis )
                 i2c_flags |= I2C_DISABLE;
+	    printf("sub_i2c_config i2c_sa=0x%x i2c_flags=0x%x\n", config.i2c_sa, i2c_flags);
             rc = sub_i2c_config( fd, config.i2c_sa, i2c_flags );
         }
             break;
@@ -415,15 +418,20 @@ int main( int argc, char* argv[] )
             break;
 
         case 'P':
+	    printf("sub_i2c_stop\n");
             rc = sub_i2c_stop( fd );
             break;
         case 'R':
             if( config.bb_i2c_ch != -1 )
                 rc = sub_bb_i2c_read( fd, config.bb_i2c_ch, config.sa, 
                             config.ma, config.ma_sz, config.buf, config.sz );
-            else
+            else{
+
+	    printf("sub_i2c_read config.sa=0x%x, config.ma=0x%x, config.ma_sz=%d, config.sz=%d\n",
+			    config.sa, config.ma, config.ma_sz,  config.sz);
                 rc = sub_i2c_read( fd, config.sa, 
                             config.ma, config.ma_sz, config.buf, config.sz );
+	    }
             if( !rc )
                 hex_ascii_dump( config.buf, config.sz );
             break;
@@ -438,6 +446,7 @@ int main( int argc, char* argv[] )
             break;
         case 'S':
             rc = sub_i2c_start( fd );
+	    printf("sub_i2c_start\n");
             break;
         case 's':
         {
@@ -530,9 +539,13 @@ int main( int argc, char* argv[] )
                 rc = sub_bb_i2c_write( fd, config.bb_i2c_ch, config.sa, 
                             config.ma, config.ma_sz, config.buf, config.sz );
             else
+	    {
+		    printf("sub_i2c_write sa=0x%x ma=0x%x ma_sz=0x%x sz=0x%x\n",
+				     config.sa, config.ma, config.ma_sz, config.sz );
                 rc = sub_i2c_write( fd, config.sa, 
                             config.ma, config.ma_sz, config.buf, config.sz );
-            break;
+	    }
+	    break;
 
         case 'X':
             /* RS Xfer */
@@ -657,6 +670,7 @@ int process_arg( int opt_index, char* equ_ptr )
         else if( i == 4 )
         {
             config.todo[config.todo_sz++]='R';
+            printf("I2C Command READ\n");
         }
         else
         {

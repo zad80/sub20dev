@@ -22,21 +22,21 @@
 */
 #define I2C_ADDRESS 0x77 //77?
 
-const unsigned char oversampling_setting = 3; //oversamplig for measurement
+const unsigned short oversampling_setting = 3; //oversamplig for measurement
 const unsigned char pressure_waittime[4] = { 5, 8, 14, 26 };
 
 //just taken from the BMP085 datasheet
-int ac1;
-int ac2;
-int ac3;
-unsigned int ac4;
-unsigned int ac5;
-unsigned int ac6;
-int b1;
-int b2;
-int mb;
-int mc;
-int md;
+short ac1;
+short ac2;
+short ac3;
+unsigned short ac4;
+unsigned short ac5;
+unsigned short ac6;
+short b1;
+short b2;
+short mb;
+short mc;
+short md;
 
 
 /*
@@ -136,14 +136,14 @@ int main( int argc, char* argv[] )
 
 		printf("sub_open: OK\n");
 	}
-	bool loop = true;
+	char loop = 1;
 	int temperature=0;
 	long int pressure=0;
 	bmp085_get_cal_data();
 	while(loop){
 		bmp085_read_temperature_and_pressure(&temperature,&pressure);
-		printf("Temperature %d , pressure %ld\n",temperature,pressure);
-		usleep(100);
+		printf("Temperature %.1f , pressure %.2lf\n",temperature*0.1f,pressure*0.01f);
+		sleep(1);
 	}
 /*
 if( rc )
@@ -179,10 +179,14 @@ char read_register(unsigned char r)
 int read_int_register(unsigned char r)
 {
 	unsigned char msb=0, lsb=0;
-	int rc = sub_i2c_read( fd,I2C_ADDRESS ,r, 2, config.buf, 2 );
+	int rc = sub_i2c_read( fd,I2C_ADDRESS ,r, 1, config.buf, 2 );
+	//printf("sub_i2c_read sa=0x%x, config.ma=0x%x, config.ma_sz=%d, config.sz=%d\n",
+                       //I2C_ADDRESS, r, 1,  2);
+
 	if(!rc ){
-		msb = config.buf[0];
-		lsb = config.buf[1];
+		msb = 0xff & config.buf[0];
+		lsb = 0xff & config.buf[1];
+	//	printf("read_int_register buf[0]=0x%x buf[1]=0x%x \n", config.buf[0] ,config.buf[1]);
 		return (((int)msb<<8) | ((int)lsb));
 	}
 	else
@@ -207,12 +211,12 @@ void bmp085_read_temperature_and_pressure(int* temperature, long int* pressure) 
    x1 = (b2 * (b6 * b6 >> 12)) >> 11; 
    x2 = ac2 * b6 >> 11;
    x3 = x1 + x2;
-   b3 = (((int32_t) ac1 * 4 + x3)<< (oversampling_setting + 2) ) >> 2;
+   b3 = (( ac1 * 4 + x3)<< (oversampling_setting + 2) ) >> 2;
    x1 = ac3 * b6 >> 13;
    x2 = (b1 * (b6 * b6 >> 12)) >> 16;
    x3 = ((x1 + x2) + 2) >> 2;
-   b4 = (ac4 * (uint32_t) (x3 + 32768)) >> 15;
-   b7 = ((uint32_t) up - b3) * (50000 >> oversampling_setting);
+   b4 = (ac4 * (unsigned long) (x3 + 32768)) >> 15;
+   b7 = ((unsigned long) up - b3) * (50000 >> oversampling_setting);
    p = b7 < 0x80000000 ? (b7 * 2) / b4 : (b7 / b4) * 2;
    x1 = (p >> 8) * (p >> 8);
    x1 = (x1 * 3038) >> 16;
@@ -224,7 +228,7 @@ void bmp085_read_temperature_and_pressure(int* temperature, long int* pressure) 
 
 unsigned int bmp085_read_ut() {
 	write_register(0xf4,0x2e);
-	usleep(5); //longer than 4.5 ms
+	usleep(5*1000); //longer than 4.5 ms
 	return read_int_register(0xf6);
 }
 
@@ -258,11 +262,11 @@ void  bmp085_get_cal_data() {
 long bmp085_read_up() {
 	int rc =0;
 	write_register(0xf4,0x34+(oversampling_setting<<6));
-	usleep(pressure_waittime[oversampling_setting]);
+	usleep(pressure_waittime[oversampling_setting]*1000);
 
-	rc = sub_i2c_read( fd,I2C_ADDRESS ,0xf6, 3, config.buf, 3 );
+	rc = sub_i2c_read( fd,I2C_ADDRESS ,0xf6, 1, config.buf, 3 );
 	if(!rc)
-		return (((long)config.buf[0]<<16) | ((long)config.buf[3]<<8) | ((long)config.buf[2])) >>(8-oversampling_setting);
+		return (((long)((0xff&config.buf[0])<<16) | ((long)(0xff&config.buf[1])<<8) | ((long)((0xff&config.buf[2]))))) >>(8-oversampling_setting);
 	else
 		printf("bmp085_read_up error \n");
 	return 0;
