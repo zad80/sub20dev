@@ -9,7 +9,7 @@
 #include <stdint.h>
 //#include "cmd_pars.h"
 #include "sub_app.h"
-
+#include <math.h>
 
 #if defined(_MSC_VER)
 #define strcasecmp _stricmp
@@ -26,17 +26,17 @@ const unsigned short oversampling_setting = 3; //oversamplig for measurement
 const unsigned char pressure_waittime[4] = { 5, 8, 14, 26 };
 
 //just taken from the BMP085 datasheet
-short ac1;
-short ac2;
-short ac3;
-unsigned short ac4;
-unsigned short ac5;
-unsigned short ac6;
-short b1;
-short b2;
-short mb;
-short mc;
-short md;
+int16_t ac1;
+int16_t ac2;
+int16_t ac3;
+uint16_t ac4;
+uint16_t ac5;
+uint16_t ac6;
+int16_t b1;
+int16_t b2;
+int16_t mb;
+int16_t mc;
+int16_t md;
 
 
 /*
@@ -59,9 +59,10 @@ sub_handle* fd = NULL ;
 */
 
 void bmp085_get_cal_data(void);
-void bmp085_read_temperature_and_pressure(int * temperature, long int* pressure);
-unsigned int bmp085_read_ut(void);
+void bmp085_read_temperature_and_pressure(long int * temperature, long int* pressure);
+int32_t bmp085_read_ut(void);
 long bmp085_read_up(void);
+int16_t read_int_register(unsigned char r);
 /*
 *-------------------------------------------------------------------------------
 * START
@@ -136,13 +137,16 @@ int main( int argc, char* argv[] )
 
 		printf("sub_open: OK\n");
 	}
+
 	char loop = 1;
-	int temperature=0;
+	long int temperature=0;
 	long int pressure=0;
+	int16_t idVersion = read_int_register(0xD0);
+	printf("Id = 0x%x Version = 0x%x\n",((idVersion&0xff00)>>8),idVersion&0xff);
 	bmp085_get_cal_data();
 	while(loop){
 		bmp085_read_temperature_and_pressure(&temperature,&pressure);
-		printf("Temperature %.1f , pressure %.2lf\n",temperature*0.1f,pressure*0.01f);
+		printf("Temperature %.1f[%ld] , pressure %.2lf[%ld]\n",temperature*0.1f,temperature,pressure*0.01f,pressure);
 		sleep(1);
 	}
 /*
@@ -175,8 +179,7 @@ char read_register(unsigned char r)
 		printf("read_register error \n");
 	return 0;
 }
-
-int read_int_register(unsigned char r)
+long read_long_register(unsigned char r)
 {
 	unsigned char msb=0, lsb=0;
 	int rc = sub_i2c_read( fd,I2C_ADDRESS ,r, 1, config.buf, 2 );
@@ -187,32 +190,84 @@ int read_int_register(unsigned char r)
 		msb = 0xff & config.buf[0];
 		lsb = 0xff & config.buf[1];
 	//	printf("read_int_register buf[0]=0x%x buf[1]=0x%x \n", config.buf[0] ,config.buf[1]);
-		return (((int)msb<<8) | ((int)lsb));
+		return (((long)msb<<8) + ((long)lsb));
 	}
 	else
 		printf("read_int_register error \n");
 	return 0;
 }
 
+int16_t read_int_register(unsigned char r)
+{
+	int16_t data=0;
+	int rc = sub_i2c_read( fd,I2C_ADDRESS ,r, 1, config.buf, 2 );
+	//printf("sub_i2c_read sa=0x%x, config.ma=0x%x, config.ma_sz=%d, config.sz=%d\n",
+                       //I2C_ADDRESS, r, 1,  2);
 
-void bmp085_read_temperature_and_pressure(int* temperature, long int* pressure) {
-  int  ut= bmp085_read_ut();
-  long up = bmp085_read_up();
+	if(!rc ){
+		///msb = 0xff & config.buf[0];
+		//lsb = 0xff & config.buf[1];
+		printf("read_int_register buf[0]=0x%x buf[1]=0x%x \n", config.buf[0] ,config.buf[1]);
+		data= (int16_t)(((config.buf[0])<<8) + config.buf[1]);
+		return data;
+	}
+	else
+		printf("read_int_register error \n");
+	return 0;
+}
+
+uint16_t read_uint_register(unsigned char r){
+	int16_t data=(uint16_t)read_int_register(r);
+	return data;
+}
+
+char read_gpio(unsigned char ngpio)
+{
+        int data=0;
+
+        int rc=0;
+        if(ngpio>=31)
+                return -1;
+        rc= sub_gpio_read( fd,&data);
+        if(!rc)
+                return ((0x1<<ngpio)&data)>>ngpio ;
+        else
+                printf("read_register error \n");
+        return 0;
+}
+
+void bmp085_read_temperature_and_pressure(long int* temperature, long int* pressure) {
+  int32_t UT, X1, X2, B5;     // following ds convention
+  UT= bmp085_read_ut();
+  float t;
+
+
+  // step 1
+  X1 = (UT - (int32_t)ac6) * ((int32_t)ac5) / pow(2,15);
+  X2 = ((int32_t)mc * pow(2,11)) / (X1+(int32_t)md);
+  B5 = X1 + X2;
+  t = (B5+8)/pow(2,4);
+  t /= 10;
+
+  *temperature = t;
+  return;
+#if 0
+  long int up = bmp085_read_up();
    long x1, x2, x3, b3, b5, b6, p;
    unsigned long b4, b7;
 
    //calculate the temperature
-   x1 = ((long)ut - ac6) * ac5 >> 15;
+   x1 = ((long)ut - ac6) * (ac5 >> 15);
    x2 = ((long) mc << 11) / (x1 + md);
    b5 = x1 + x2;
    *temperature = (b5 + 8) >> 4;
    //calculate the pressure
    b6 = b5 - 4000;
    x1 = (b2 * (b6 * b6 >> 12)) >> 11; 
-   x2 = ac2 * b6 >> 11;
+   x2 = ac2 * (b6 >> 11);
    x3 = x1 + x2;
    b3 = (( ac1 * 4 + x3)<< (oversampling_setting + 2) ) >> 2;
-   x1 = ac3 * b6 >> 13;
+   x1 = ac3 * (b6 >> 13);
    x2 = (b1 * (b6 * b6 >> 12)) >> 16;
    x3 = ((x1 + x2) + 2) >> 2;
    b4 = (ac4 * (unsigned long) (x3 + 32768)) >> 15;
@@ -222,14 +277,18 @@ void bmp085_read_temperature_and_pressure(int* temperature, long int* pressure) 
    x1 = (x1 * 3038) >> 16;
    x2 = (-7357 * p) >> 16;
    *pressure = p + ((x1 + x2 + 3791) >> 4);
-
+#endif
 }
 
 
-unsigned int bmp085_read_ut() {
+int32_t bmp085_read_ut() {
 	write_register(0xf4,0x2e);
-	usleep(5*1000); //longer than 4.5 ms
-	return read_int_register(0xf6);
+	while(read_gpio(5)==0)
+		usleep(500);
+	//usleep(5*1000); //longer than 4.5 ms
+	uint16_t t=0;
+	t=read_int_register(0xf6);
+	return (int32_t)t;
 }
 
 void  bmp085_get_cal_data() {
@@ -240,11 +299,11 @@ void  bmp085_get_cal_data() {
 	printf("AC2: %d\n",ac2);
 	ac3 = read_int_register(0xAE);
 	printf("AC3: %d\n",ac3);
-	ac4 = read_int_register(0xB0);
+	ac4 = read_uint_register(0xB0);
 	printf("AC4: %d\n",ac4);
-	ac5 = read_int_register(0xB2);
+	ac5 = read_uint_register(0xB2);
 	printf("AC5: %d\n",ac5);
-	ac6 = read_int_register(0xB4);
+	ac6 = read_uint_register(0xB4);
 	printf("AC6: %d\n",ac6);
 	b1 = read_int_register(0xB6);
 	printf("B1: %d\n",b1);
@@ -262,7 +321,9 @@ void  bmp085_get_cal_data() {
 long bmp085_read_up() {
 	int rc =0;
 	write_register(0xf4,0x34+(oversampling_setting<<6));
-	usleep(pressure_waittime[oversampling_setting]*1000);
+	while(read_gpio(5)==0)
+		usleep(500);
+	//usleep(pressure_waittime[oversampling_setting]*1000);
 
 	rc = sub_i2c_read( fd,I2C_ADDRESS ,0xf6, 1, config.buf, 3 );
 	if(!rc)

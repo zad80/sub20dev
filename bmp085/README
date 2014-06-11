@@ -14,3 +14,7 @@ for the i2c part :
  SCL to gpio-2
 
 Slave Address 0x77
+
+# example for reading a register using the sub_app
+sub_app -i=0x77,1,0xD0,2
+the above command read i2c slave 0x77 addressing register at 1 byte at time , read register 0xD0 ,for 2 byte , so it reads 0xd0 and 0xd1
